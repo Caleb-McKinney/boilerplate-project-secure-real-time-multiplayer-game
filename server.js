@@ -11,35 +11,36 @@ const runner = require('./test-runner.js');
 const app = express();
 
 /* ======================
-   SECURITY MIDDLEWARE (MUST BE FIRST)
+   SECURITY MIDDLEWARE (ABSOLUTELY FIRST - BEFORE EVERYTHING)
    ====================== */
 
-// Single unified security middleware that runs first
+// Use helmet for MIME sniffing and XSS protection
+app.use(helmet.noSniff());
+app.use(helmet.xssFilter());
+
+// Custom middleware for cache control and powered-by header
 app.use((req, res, next) => {
-  // X-Content-Type-Options: nosniff (prevent MIME sniffing)
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  
-  // X-XSS-Protection (prevent XSS)
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  
-  // Cache control headers
+  // 18. Disable client caching
   res.setHeader('Surrogate-Control', 'no-store');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   
-  // X-Powered-By (custom value)
+  // 19. Fake powered-by header
   res.setHeader('X-Powered-By', 'PHP 7.4.3');
   
   next();
 });
 
-// Additional helmet protection (not counted by FCC tests)
-app.use(helmet({
-  noSniff: false,  // Already handled above
-  xssFilter: false, // Already handled above
-  hidePoweredBy: false
-}));
+/* ======================
+   GAME STATE
+   ====================== */
+
+const players = {};
+let collectibles = [];
+
+app.locals.players = players;
+app.locals.collectibles = collectibles;
 
 /* ======================
    STATIC + PARSING
@@ -51,11 +52,10 @@ app.use('/assets', express.static(process.cwd() + '/assets'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Allow FCC testing connections
 app.use(cors({ origin: '*' }));
 
 /* ======================
-   ROUTES
+   ROUTES (AFTER SECURITY)
    ====================== */
 
 app.route('/')
@@ -103,12 +103,6 @@ const io = socket(server, {
   }
 });
 
-const players = {};
-let collectibles = [];
-
-app.locals.players = players;
-app.locals.collectibles = collectibles;
-
 function getRandomPosition() {
   return {
     x: Math.floor(Math.random() * 600) + 20,
@@ -126,6 +120,7 @@ function generateCollectible() {
   };
 }
 
+// Ensure at least one collectible exists
 collectibles.push(generateCollectible());
 
 io.on('connection', (socket) => {
